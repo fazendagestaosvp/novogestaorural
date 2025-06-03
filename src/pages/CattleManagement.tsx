@@ -322,83 +322,140 @@ export const CattleManagement: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      // Verificar se a tabela cattle existe
-      const { data: tableExists, error: tableError } = await supabase
-        .from('cattle')
-        .select('id')
-        .limit(1);
+      // Verificar se a tabela cattle existe e criar se necessário
+      try {
+        const { data: tableExists, error: tableError } = await supabase
+          .from('cattle')
+          .select('id')
+          .limit(1);
 
-      if (tableError && tableError.message.includes('does not exist')) {
-        console.log('Tabela cattle não existe. Tentando criar...');
-        // Tentar criar a tabela usando função administrativa
-        const adminClient = await import('../integrations/supabase/admin-client');
-        await adminClient.ensureCattleTableExists();
-        // Também garantir que as funções RPC existam
-        await adminClient.ensureRpcFunctionsExist();
+        if (tableError && tableError.message.includes('does not exist')) {
+          console.log('Tabela cattle não existe. Tentando criar...');
+          // Tentar criar a tabela usando função administrativa
+          const adminClient = await import('../integrations/supabase/admin-client');
+          await adminClient.ensureCattleTableExists();
+          // Também garantir que as funções RPC existam
+          await adminClient.ensureRpcFunctionsExist();
+        }
+      } catch (tableCheckError) {
+        console.error('Erro ao verificar/criar tabela:', tableCheckError);
+        // Continuar mesmo com erro, pois a tabela pode já existir
       }
 
+      let insertSuccess = false;
+      let insertedData = null;
+
       // Estratégia 1: Tentar usar a função RPC primeiro (mais confiável)
-      console.log('Tentando inserir via RPC...');
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc('insert_cattle', { cattle_data: cattleWithUserId });
-        
-      if (!rpcError && rpcData) {
-        console.log('Inserido com sucesso via RPC:', rpcData);
-        // Adicionar o novo registro ao estado
-        const newCattleWithId = { ...cattleWithUserId, id: rpcData.id };
-        setCattleData(prev => [...prev, newCattleWithId]);
+      try {
+        console.log('Tentando inserir via RPC...');
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('insert_cattle', { cattle_data: cattleWithUserId });
+          
+        if (!rpcError && rpcData) {
+          console.log('Inserido com sucesso via RPC:', rpcData);
+          insertSuccess = true;
+          insertedData = { ...cattleWithUserId, id: rpcData.id };
+        } else {
+          console.log('RPC falhou:', rpcError);
+        }
+      } catch (rpcError) {
+        console.error('Exceção ao tentar RPC:', rpcError);
+      }
+      
+      // Estratégia 2: Se RPC falhar, tentar inserir diretamente na tabela
+      if (!insertSuccess) {
+        try {
+          console.log('Tentando método padrão de inserção...');
+          const { data, error } = await supabase
+            .from('cattle')
+            .insert([cattleWithUserId])
+            .select();
+
+          if (!error && data && data.length > 0) {
+            console.log('Inserido com sucesso via método padrão:', data);
+            insertSuccess = true;
+            insertedData = data[0];
+          } else {
+            console.error('Erro na inserção padrão:', error);
+            // Verificar se o erro está relacionado à conexão
+            if (error && (error.message.includes('network') || 
+                         error.message.includes('connection') || 
+                         error.message.includes('timeout'))) {
+              throw new Error(`Erro de conexão com o Supabase: ${error.message}`);
+            }
+          }
+        } catch (insertError) {
+          console.error('Exceção na inserção padrão:', insertError);
+        }
+      }
+
+      // Se conseguiu inserir no Supabase
+      if (insertSuccess && insertedData) {
+        // Atualizar o estado com o novo animal
+        setCattleData(prev => [...prev, insertedData]);
         setIsSheetOpen(false);
         toast({
           title: "Animal adicionado com sucesso!",
-          description: `${newCattle.name} foi adicionado ao rebanho via RPC.`,
+          description: `${newCattle.name} foi adicionado ao rebanho no banco de dados.`,
         });
         // Recarregar dados para garantir sincronização
         loadCattleData();
         return;
       }
       
-      console.log('RPC falhou, tentando método padrão...', rpcError);
-      
-      // Estratégia 2: Tentar inserir diretamente na tabela
-      const { data, error } = await supabase
-        .from('cattle')
-        .insert([cattleWithUserId])
-        .select();
-
-      if (!error && data) {
-        // Inserção bem-sucedida
-        setCattleData(prev => [...prev, data[0]]);
-        setIsSheetOpen(false);
-        toast({
-          title: "Animal adicionado com sucesso!",
-          description: `${newCattle.name} foi adicionado ao rebanho.`,
-        });
-        loadCattleData();
-        return;
+      // Se chegou aqui, ambas as estratégias falharam
+      // Verificar a conexão com o Supabase antes de desistir
+      try {
+        const { data: pingData, error: pingError } = await supabase
+          .from('_anon_auth_check')
+          .select('*')
+          .limit(1);
+          
+        if (pingError) {
+          throw new Error(`Erro de conexão com Supabase: ${pingError.message}`);
+        }
+      } catch (pingError) {
+        console.error('Falha ao verificar conexão com Supabase:', pingError);
+        throw new Error('Não foi possível conectar ao banco de dados. Verifique sua conexão com a internet.');
       }
       
-      console.error('Erro ao adicionar gado via método padrão:', error);
+      // Se a conexão está ok mas ainda não conseguiu salvar, há um problema com o banco
+      throw new Error('Não foi possível salvar o animal no banco de dados. Tente novamente ou contate o suporte.');
       
-      // Estratégia 3: Salvar localmente como último recurso
-      const tempId = `temp-${Date.now()}`;
-      const cattleWithTempId = { ...cattleWithUserId, id: tempId };
-      const localCattle = JSON.parse(localStorage.getItem('localCattleData') || '[]');
-      localCattle.push(cattleWithTempId);
-      localStorage.setItem('localCattleData', JSON.stringify(localCattle));
-      
-      setCattleData(prev => [...prev, cattleWithTempId]);
-      setIsSheetOpen(false);
-      toast({
-        title: "Animal adicionado localmente",
-        description: `${newCattle.name} foi adicionado ao rebanho localmente.`,
-      });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao adicionar animal:', error);
-      toast({
-        title: "Erro ao adicionar animal",
-        description: "Não foi possível adicionar o animal ao rebanho. Tente novamente.",
-        variant: "destructive"
-      });
+      
+      // Decidir se deve salvar localmente como fallback
+      const shouldSaveLocally = error.message && (
+        error.message.includes('conexão') || 
+        error.message.includes('internet') ||
+        error.message.includes('network') ||
+        error.message.includes('timeout')
+      );
+      
+      if (shouldSaveLocally) {
+        // Salvar localmente apenas em caso de problemas de conexão
+        const tempId = `temp-${Date.now()}`;
+        const cattleWithTempId = { ...cattleWithUserId, id: tempId };
+        const localCattle = JSON.parse(localStorage.getItem('localCattleData') || '[]');
+        localCattle.push(cattleWithTempId);
+        localStorage.setItem('localCattleData', JSON.stringify(localCattle));
+        
+        setCattleData(prev => [...prev, cattleWithTempId]);
+        setIsSheetOpen(false);
+        toast({
+          title: "Animal salvo temporariamente",
+          description: `${newCattle.name} foi salvo localmente devido a problemas de conexão. Será sincronizado automaticamente quando a conexão for restaurada.`,
+          variant: "warning"
+        });
+      } else {
+        // Erro não relacionado à conexão - não salvar localmente
+        toast({
+          title: "Erro ao adicionar animal",
+          description: error.message || "Não foi possível adicionar o animal ao rebanho. Tente novamente.",
+          variant: "destructive"
+        });
+      }
     } finally {
       setIsLoading(false);
     }
