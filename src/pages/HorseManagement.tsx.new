@@ -1,0 +1,126 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Search, Plus, Eye, Edit, Trash2, Heart, Users, User } from 'lucide-react';
+import { HorseData } from '@/types/horse';
+import { AddHorseForm } from '@/components/horse/AddHorseForm';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+export const HorseManagement = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [horses, setHorses] = useState<HorseData[]>([]);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+  
+  // Estados para modais de visualização, edição e exclusão
+  const [selectedHorse, setSelectedHorse] = useState<HorseData | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  
+  // Variáveis para filtros e contagens
+  const filteredHorses = horses.filter(horse =>
+    horse.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    horse.breed.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalHorses = horses.length;
+  const femaleCount = horses.filter(horse => horse.gender === 'Fêmea').length;
+  const maleCount = horses.filter(horse => horse.gender === 'Macho').length;
+
+  useEffect(() => {
+    fetchHorses();
+  }, []);
+
+  // Função para carregar dados dos cavalos
+  async function fetchHorses() {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('horse')
+        .select('*');
+        
+      if (!error && data) {
+        setHorses(data);
+      } else {
+        console.log('A tabela horses pode não existir:', error);
+        setHorses([]);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados de cavalos:', error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados dos cavalos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Função para retornar classe CSS baseada no status
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Domado': return 'bg-green-100 text-green-800';
+      case 'Em treinamento': return 'bg-blue-100 text-blue-800';
+      case 'Potro': return 'bg-yellow-100 text-yellow-800';
+      case 'Vendido': return 'bg-gray-100 text-gray-800';
+      case 'Morto': return 'bg-red-100 text-red-800';
+      case 'Prenha': return 'bg-purple-100 text-purple-800';
+      case 'Saudável': return 'bg-emerald-100 text-emerald-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Função compartilhada para upload de arquivos
+  async function uploadFile(file: File | string, path: string): Promise<string | null> {
+    if (!file || typeof file === 'string') return file as string;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${path}/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('horses')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error(`Erro ao fazer upload de ${path}:`, uploadError);
+        return null;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('horses')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error(`Erro ao processar upload de ${path}:`, error);
+      return null;
+    }
+  }

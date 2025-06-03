@@ -1,0 +1,72 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 123 38% 35%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 60 4.8% 95.9%;
+    --secondary-foreground: 123 38% 25%;
+
+    --muted: 60 4.8% 95.9%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 123 20% 85%;
+    --accent-foreground: 123 38% 25%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 123 38% 35%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 123 25% 96%;
+    --sidebar-foreground: 123 38% 25%;
+    --sidebar-primary: 123 38% 35%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 123 15% 90%;
+    --sidebar-accent-foreground: 123 38% 25%;
+    --sidebar-border: 123 20% 85%;
+    --sidebar-ring: 123 38% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .bg-farm-gradient {
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
+  }
+  
+  .bg-earth-gradient {
+    background: linear-gradient(135deg, #a3a3a3 0%, #737373 50%, #525252 100%);
+  }
+  
+  .text-shadow-lg {
+    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+}

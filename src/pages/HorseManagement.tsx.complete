@@ -1,0 +1,598 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Search, Plus, Eye, Edit, Trash2, Heart, Users, User } from 'lucide-react';
+import { HorseData } from '@/types/horse';
+import { AddHorseForm } from '@/components/horse/AddHorseForm';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+export const HorseManagement = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [horses, setHorses] = useState<HorseData[]>([]);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+  
+  // Estados para modais de visualização, edição e exclusão
+  const [selectedHorse, setSelectedHorse] = useState<HorseData | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  
+  // Variáveis para filtros e contagens
+  const filteredHorses = horses.filter(horse =>
+    horse.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    horse.breed.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalHorses = horses.length;
+  const femaleCount = horses.filter(horse => horse.gender === 'Fêmea').length;
+  const maleCount = horses.filter(horse => horse.gender === 'Macho').length;
+
+  useEffect(() => {
+    fetchHorses();
+  }, []);
+
+  // Função para carregar dados dos cavalos
+  async function fetchHorses() {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('horse')
+        .select('*');
+        
+      if (!error && data) {
+        setHorses(data);
+      } else {
+        console.log('A tabela horses pode não existir:', error);
+        setHorses([]);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados de cavalos:', error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados dos cavalos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // Função para retornar classe CSS baseada no status
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Domado': return 'bg-green-100 text-green-800';
+      case 'Em treinamento': return 'bg-blue-100 text-blue-800';
+      case 'Potro': return 'bg-yellow-100 text-yellow-800';
+      case 'Vendido': return 'bg-gray-100 text-gray-800';
+      case 'Morto': return 'bg-red-100 text-red-800';
+      case 'Prenha': return 'bg-purple-100 text-purple-800';
+      case 'Saudável': return 'bg-emerald-100 text-emerald-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Função compartilhada para upload de arquivos
+  async function uploadFile(file: File | string, path: string): Promise<string | null> {
+    if (!file || typeof file === 'string') return file as string;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${path}/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('horses')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error(`Erro ao fazer upload de ${path}:`, uploadError);
+        return null;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('horses')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error(`Erro ao processar upload de ${path}:`, error);
+      return null;
+    }
+  }
+  // Função para adicionar um novo cavalo
+  const handleAddHorse = async (newHorse: HorseData) => {
+    try {
+      console.log('Recebendo dados para adicionar:', newHorse);
+      
+      // Array para armazenar URLs das fotos do animal
+      const photoUrls: string[] = [];
+      
+      // Processar fotos do animal uma a uma
+      if (newHorse.animalPhotos && Array.isArray(newHorse.animalPhotos)) {
+        for (const photo of newHorse.animalPhotos) {
+          if (!photo) continue;
+          try {
+            const url = await uploadFile(photo, 'animal');
+            if (url) photoUrls.push(url);
+          } catch (error) {
+            console.error('Erro no upload de foto de animal:', error);
+          }
+        }
+      }
+      
+      // Processar foto do pai
+      let fatherPhotoUrl = null;
+      if (newHorse.fatherPhoto) {
+        try {
+          fatherPhotoUrl = await uploadFile(newHorse.fatherPhoto, 'pai');
+        } catch (error) {
+          console.error('Erro no upload de foto do pai:', error);
+        }
+      }
+      
+      // Processar foto da mãe
+      let motherPhotoUrl = null;
+      if (newHorse.motherPhoto) {
+        try {
+          motherPhotoUrl = await uploadFile(newHorse.motherPhoto, 'mae');
+        } catch (error) {
+          console.error('Erro no upload de foto da mãe:', error);
+        }
+      }
+      
+      // Processar certificado
+      let certificateUrl = null;
+      if (newHorse.registrationCertificate) {
+        try {
+          certificateUrl = await uploadFile(newHorse.registrationCertificate, 'certificado');
+        } catch (error) {
+          console.error('Erro no upload de certificado:', error);
+        }
+      }
+      
+      // Preparar objeto com dados para inserção
+      const horseData = {
+        name: newHorse.name,
+        breed: newHorse.breed,
+        age: Number(newHorse.age),
+        color: newHorse.color,
+        gender: newHorse.gender,
+        status: newHorse.status,
+        weight: newHorse.weight ? Number(newHorse.weight) : null,
+        observations: newHorse.observations || null,
+        dateOfBirth: newHorse.dateOfBirth ? new Date(newHorse.dateOfBirth).toISOString().split('T')[0] : null,
+        entryDate: newHorse.entryDate ? new Date(newHorse.entryDate).toISOString().split('T')[0] : null,
+        animalPhotos: photoUrls.length > 0 ? photoUrls : null,
+        fatherPhoto: fatherPhotoUrl,
+        motherPhoto: motherPhotoUrl,
+        registrationCertificate: certificateUrl,
+      };
+      
+      console.log('Inserindo novo cavalo:', horseData);
+      
+      // Inserir no banco de dados
+      const { data, error } = await supabase
+        .from('horse')
+        .insert([horseData])
+        .select();
+        
+      if (error) {
+        console.error('Erro ao inserir no banco de dados:', error);
+        throw error;
+      }
+      
+      // Atualizar o estado local com o novo cavalo
+      if (data && data.length > 0) {
+        setHorses([...horses, data[0]]);
+      }
+      
+      setIsAddFormOpen(false);
+      
+      toast({
+        title: "Cavalo adicionado",
+        description: `${newHorse.name} foi adicionado com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar cavalo:', error);
+      toast({
+        title: "Erro ao adicionar",
+        description: "Não foi possível adicionar o cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Função para atualizar cavalos
+  const handleUpdateHorse = async (updatedHorse: HorseData) => {
+    try {
+      console.log('Recebendo dados para atualizar:', updatedHorse);
+      
+      // Array para armazenar URLs das fotos do animal
+      const photoUrls: string[] = [];
+      
+      // Processar fotos do animal uma a uma
+      if (updatedHorse.animalPhotos && Array.isArray(updatedHorse.animalPhotos)) {
+        for (const photo of updatedHorse.animalPhotos) {
+          if (!photo) continue;
+          try {
+            const url = await uploadFile(photo, 'animal');
+            if (url) photoUrls.push(url);
+          } catch (error) {
+            console.error('Erro no upload de foto de animal:', error);
+          }
+        }
+      }
+      
+      // Processar foto do pai
+      let fatherPhotoUrl = null;
+      if (updatedHorse.fatherPhoto) {
+        try {
+          fatherPhotoUrl = await uploadFile(updatedHorse.fatherPhoto, 'pai');
+        } catch (error) {
+          console.error('Erro no upload de foto do pai:', error);
+        }
+      }
+      
+      // Processar foto da mãe
+      let motherPhotoUrl = null;
+      if (updatedHorse.motherPhoto) {
+        try {
+          motherPhotoUrl = await uploadFile(updatedHorse.motherPhoto, 'mae');
+        } catch (error) {
+          console.error('Erro no upload de foto da mãe:', error);
+        }
+      }
+      
+      // Processar certificado
+      let certificateUrl = null;
+      if (updatedHorse.registrationCertificate) {
+        try {
+          certificateUrl = await uploadFile(updatedHorse.registrationCertificate, 'certificado');
+        } catch (error) {
+          console.error('Erro no upload de certificado:', error);
+        }
+      }
+      
+      // Preparar objeto com dados básicos para atualização
+      const horseData: any = {
+        name: updatedHorse.name,
+        breed: updatedHorse.breed,
+        age: Number(updatedHorse.age),
+        color: updatedHorse.color,
+        gender: updatedHorse.gender,
+        status: updatedHorse.status,
+        weight: updatedHorse.weight ? Number(updatedHorse.weight) : null,
+        observations: updatedHorse.observations || null,
+        dateOfBirth: updatedHorse.dateOfBirth ? new Date(updatedHorse.dateOfBirth).toISOString().split('T')[0] : null,
+        entryDate: updatedHorse.entryDate ? new Date(updatedHorse.entryDate).toISOString().split('T')[0] : null,
+      };
+
+      // Adicionar apenas os campos de arquivo que foram atualizados
+      if (photoUrls.length > 0) {
+        horseData.animalPhotos = photoUrls;
+      }
+      
+      if (fatherPhotoUrl) {
+        horseData.fatherPhoto = fatherPhotoUrl;
+      }
+      
+      if (motherPhotoUrl) {
+        horseData.motherPhoto = motherPhotoUrl;
+      }
+      
+      if (certificateUrl) {
+        horseData.registrationCertificate = certificateUrl;
+      }
+      
+      console.log('Atualizando dados do cavalo:', horseData);
+      
+      // Atualizar os dados no banco de dados
+      const { error } = await supabase
+        .from('horse')
+        .update(horseData)
+        .eq('id', updatedHorse.id);
+        
+      if (error) {
+        console.error('Erro ao atualizar no banco de dados:', error);
+        throw error;
+      }
+      
+      // Atualizar o estado local com os dados atualizados
+      const updatedHorses = horses.map(horse => 
+        horse.id === updatedHorse.id ? { ...horse, ...horseData } : horse
+      );
+      
+      setHorses(updatedHorses);
+      setIsEditFormOpen(false);
+      setSelectedHorse(null);
+      
+      toast({
+        title: "Cavalo atualizado",
+        description: `Os dados de ${updatedHorse.name} foram atualizados com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar cavalo:', error);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar os dados do cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
+  // Funções de navegação e controle de modais
+  const handleCancelAdd = () => {
+    setIsAddFormOpen(false);
+  };
+
+  const handleViewHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsViewModalOpen(true);
+  };
+
+  const handleEditHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsEditFormOpen(true);
+  };
+
+  const handleDeleteHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Função para confirmar exclusão de cavalos
+  const confirmDelete = async () => {
+    if (!selectedHorse) return;
+
+    try {
+      const { error } = await supabase
+        .from('horse')
+        .delete()
+        .eq('id', selectedHorse.id);
+
+      if (error) throw error;
+
+      // Atualiza o estado local
+      setHorses(horses.filter(h => h.id !== selectedHorse.id));
+      setIsDeleteDialogOpen(false);
+      setSelectedHorse(null);
+  
+      toast({
+        title: "Cavalo removido",
+        description: `${selectedHorse.name} foi removido com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao excluir cavalo:', error);
+      toast({
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Cabeçalho */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Gestão de Cavalos</h1>
+          <p className="text-muted-foreground mt-1">Gerencie seu plantel de cavalos facilmente.</p>
+        </div>
+        <Button 
+          className="mt-4 md:mt-0" 
+          onClick={() => setIsAddFormOpen(true)}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Adicionar Cavalo
+        </Button>
+      </div>
+
+      {/* Cards de estatísticas */}
+      <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total de Cavalos</CardTitle>
+            <Heart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalHorses}</div>
+            <p className="text-xs text-muted-foreground">Cavalos registrados</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Fêmeas</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{femaleCount}</div>
+            <p className="text-xs text-muted-foreground">Éguas e potras</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Machos</CardTitle>
+            <User className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{maleCount}</div>
+            <p className="text-xs text-muted-foreground">Garanhões e potros</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Campo de busca */}
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou raça..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+      </div>
+
+      {/* Lista de cavalos */}
+      <div className="rounded-md border">
+        {isLoading ? (
+          <div className="p-8 text-center">
+            <p>Carregando dados...</p>
+          </div>
+        ) : filteredHorses.length === 0 ? (
+          <div className="p-8 text-center">
+            <p>Nenhum cavalo encontrado.</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Raça</TableHead>
+                <TableHead>Idade</TableHead>
+                <TableHead>Gênero</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredHorses.map((horse) => (
+                <TableRow key={horse.id}>
+                  <TableCell className="font-medium">{horse.name}</TableCell>
+                  <TableCell>{horse.breed}</TableCell>
+                  <TableCell>{horse.age} anos</TableCell>
+                  <TableCell>{horse.gender}</TableCell>
+                  <TableCell>
+                    <Badge className={getStatusColor(horse.status)}>
+                      {horse.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleViewHorse(horse)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditHorse(horse)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteHorse(horse)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+      {/* Modal de detalhes */}
+      {selectedHorse && (
+        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Detalhes do Cavalo: {selectedHorse.name}</DialogTitle>
+              <DialogDescription>
+                Informações detalhadas sobre o cavalo selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-semibold mb-2">Informações Gerais</h3>
+                <p><strong>ID:</strong> {selectedHorse.id}</p>
+                <p><strong>Nome:</strong> {selectedHorse.name}</p>
+                <p><strong>Raça:</strong> {selectedHorse.breed}</p>
+                <p><strong>Idade:</strong> {selectedHorse.age} anos</p>
+                <p><strong>Cor:</strong> {selectedHorse.color}</p>
+                <p><strong>Gênero:</strong> {selectedHorse.gender}</p>
+                <p><strong>Status:</strong> <Badge className={getStatusColor(selectedHorse.status)}>{selectedHorse.status}</Badge></p>
+                <p><strong>Peso:</strong> {selectedHorse.weight ? `${selectedHorse.weight} kg` : 'Não informado'}</p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">Datas e Observações</h3>
+                <p><strong>Data de Nascimento:</strong> {selectedHorse.dateOfBirth ? new Date(selectedHorse.dateOfBirth).toLocaleDateString('pt-BR') : 'Não informada'}</p>
+                <p><strong>Data de Entrada:</strong> {selectedHorse.entryDate ? new Date(selectedHorse.entryDate).toLocaleDateString('pt-BR') : 'Não informada'}</p>
+                <p><strong>Observações:</strong> {selectedHorse.observations || 'Nenhuma observação'}</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de edição */}
+      {selectedHorse && (
+        <Dialog open={isEditFormOpen} onOpenChange={setIsEditFormOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Editar Cavalo: {selectedHorse.name}</DialogTitle>
+              <DialogDescription>
+                Atualize as informações do cavalo selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <AddHorseForm 
+              onSubmit={handleUpdateHorse} 
+              onCancel={() => setIsEditFormOpen(false)} 
+              defaultValues={selectedHorse}
+              isEditing={true}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Diálogo de confirmação para exclusão */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O cavalo {selectedHorse?.name} será removido permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Folha lateral para adicionar novo cavalo */}
+      <Sheet open={isAddFormOpen} onOpenChange={setIsAddFormOpen}>
+        <SheetContent className="sm:max-w-xl overflow-y-auto">
+          <h2 className="text-xl font-semibold mb-4">Adicionar Novo Cavalo</h2>
+          <AddHorseForm onSubmit={handleAddHorse} onCancel={handleCancelAdd} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};
+
+export default HorseManagement;

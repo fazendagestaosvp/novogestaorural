@@ -1,0 +1,168 @@
+  // Funções de navegação e controle de modais
+  const handleCancelAdd = () => {
+    setIsAddFormOpen(false);
+  };
+
+  const handleViewHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsViewModalOpen(true);
+  };
+
+  const handleEditHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsEditFormOpen(true);
+  };
+
+  const handleDeleteHorse = (horse: HorseData) => {
+    setSelectedHorse(horse);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Função para confirmar exclusão de cavalos
+  const confirmDelete = async () => {
+    if (!selectedHorse) return;
+
+    try {
+      const { error } = await supabase
+        .from('horse')
+        .delete()
+        .eq('id', selectedHorse.id);
+
+      if (error) throw error;
+
+      // Atualiza o estado local
+      setHorses(horses.filter(h => h.id !== selectedHorse.id));
+      setIsDeleteDialogOpen(false);
+      setSelectedHorse(null);
+  
+      toast({
+        title: "Cavalo removido",
+        description: `${selectedHorse.name} foi removido com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao excluir cavalo:', error);
+      toast({
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Cabeçalho */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Gestão de Cavalos</h1>
+          <p className="text-muted-foreground mt-1">Gerencie seu plantel de cavalos facilmente.</p>
+        </div>
+        <Button 
+          className="mt-4 md:mt-0" 
+          onClick={() => setIsAddFormOpen(true)}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Adicionar Cavalo
+        </Button>
+      </div>
+
+      {/* Cards de estatísticas */}
+      <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total de Cavalos</CardTitle>
+            <Heart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalHorses}</div>
+            <p className="text-xs text-muted-foreground">Cavalos registrados</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Fêmeas</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{femaleCount}</div>
+            <p className="text-xs text-muted-foreground">Éguas e potras</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Machos</CardTitle>
+            <User className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{maleCount}</div>
+            <p className="text-xs text-muted-foreground">Garanhões e potros</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Campo de busca */}
+      <div className="mb-6">
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome ou raça..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8"
+          />
+        </div>
+      </div>
+
+      {/* Lista de cavalos */}
+      <div className="rounded-md border">
+        {isLoading ? (
+          <div className="p-8 text-center">
+            <p>Carregando dados...</p>
+          </div>
+        ) : filteredHorses.length === 0 ? (
+          <div className="p-8 text-center">
+            <p>Nenhum cavalo encontrado.</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Raça</TableHead>
+                <TableHead>Idade</TableHead>
+                <TableHead>Gênero</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredHorses.map((horse) => (
+                <TableRow key={horse.id}>
+                  <TableCell className="font-medium">{horse.name}</TableCell>
+                  <TableCell>{horse.breed}</TableCell>
+                  <TableCell>{horse.age} anos</TableCell>
+                  <TableCell>{horse.gender}</TableCell>
+                  <TableCell>
+                    <Badge className={getStatusColor(horse.status)}>
+                      {horse.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="icon" onClick={() => handleViewHorse(horse)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditHorse(horse)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteHorse(horse)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>

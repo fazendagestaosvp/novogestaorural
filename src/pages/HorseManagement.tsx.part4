@@ -1,0 +1,84 @@
+      {/* Modal de detalhes */}
+      {selectedHorse && (
+        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Detalhes do Cavalo: {selectedHorse.name}</DialogTitle>
+              <DialogDescription>
+                Informações detalhadas sobre o cavalo selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="font-semibold mb-2">Informações Gerais</h3>
+                <p><strong>ID:</strong> {selectedHorse.id}</p>
+                <p><strong>Nome:</strong> {selectedHorse.name}</p>
+                <p><strong>Raça:</strong> {selectedHorse.breed}</p>
+                <p><strong>Idade:</strong> {selectedHorse.age} anos</p>
+                <p><strong>Cor:</strong> {selectedHorse.color}</p>
+                <p><strong>Gênero:</strong> {selectedHorse.gender}</p>
+                <p><strong>Status:</strong> <Badge className={getStatusColor(selectedHorse.status)}>{selectedHorse.status}</Badge></p>
+                <p><strong>Peso:</strong> {selectedHorse.weight ? `${selectedHorse.weight} kg` : 'Não informado'}</p>
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">Datas e Observações</h3>
+                <p><strong>Data de Nascimento:</strong> {selectedHorse.dateOfBirth ? new Date(selectedHorse.dateOfBirth).toLocaleDateString('pt-BR') : 'Não informada'}</p>
+                <p><strong>Data de Entrada:</strong> {selectedHorse.entryDate ? new Date(selectedHorse.entryDate).toLocaleDateString('pt-BR') : 'Não informada'}</p>
+                <p><strong>Observações:</strong> {selectedHorse.observations || 'Nenhuma observação'}</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>Fechar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal de edição */}
+      {selectedHorse && (
+        <Dialog open={isEditFormOpen} onOpenChange={setIsEditFormOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Editar Cavalo: {selectedHorse.name}</DialogTitle>
+              <DialogDescription>
+                Atualize as informações do cavalo selecionado.
+              </DialogDescription>
+            </DialogHeader>
+            <AddHorseForm 
+              onSubmit={handleUpdateHorse} 
+              onCancel={() => setIsEditFormOpen(false)} 
+              defaultValues={selectedHorse}
+              isEditing={true}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Diálogo de confirmação para exclusão */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O cavalo {selectedHorse?.name} será removido permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Folha lateral para adicionar novo cavalo */}
+      <Sheet open={isAddFormOpen} onOpenChange={setIsAddFormOpen}>
+        <SheetContent className="sm:max-w-xl overflow-y-auto">
+          <h2 className="text-xl font-semibold mb-4">Adicionar Novo Cavalo</h2>
+          <AddHorseForm onSubmit={handleAddHorse} onCancel={handleCancelAdd} />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+};
+
+export default HorseManagement;

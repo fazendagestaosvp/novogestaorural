@@ -1,0 +1,220 @@
+  // Função para adicionar um novo cavalo
+  const handleAddHorse = async (newHorse: HorseData) => {
+    try {
+      console.log('Recebendo dados para adicionar:', newHorse);
+      
+      // Array para armazenar URLs das fotos do animal
+      const photoUrls: string[] = [];
+      
+      // Processar fotos do animal uma a uma
+      if (newHorse.animalPhotos && Array.isArray(newHorse.animalPhotos)) {
+        for (const photo of newHorse.animalPhotos) {
+          if (!photo) continue;
+          try {
+            const url = await uploadFile(photo, 'animal');
+            if (url) photoUrls.push(url);
+          } catch (error) {
+            console.error('Erro no upload de foto de animal:', error);
+          }
+        }
+      }
+      
+      // Processar foto do pai
+      let fatherPhotoUrl = null;
+      if (newHorse.fatherPhoto) {
+        try {
+          fatherPhotoUrl = await uploadFile(newHorse.fatherPhoto, 'pai');
+        } catch (error) {
+          console.error('Erro no upload de foto do pai:', error);
+        }
+      }
+      
+      // Processar foto da mãe
+      let motherPhotoUrl = null;
+      if (newHorse.motherPhoto) {
+        try {
+          motherPhotoUrl = await uploadFile(newHorse.motherPhoto, 'mae');
+        } catch (error) {
+          console.error('Erro no upload de foto da mãe:', error);
+        }
+      }
+      
+      // Processar certificado
+      let certificateUrl = null;
+      if (newHorse.registrationCertificate) {
+        try {
+          certificateUrl = await uploadFile(newHorse.registrationCertificate, 'certificado');
+        } catch (error) {
+          console.error('Erro no upload de certificado:', error);
+        }
+      }
+      
+      // Preparar objeto com dados para inserção
+      const horseData = {
+        name: newHorse.name,
+        breed: newHorse.breed,
+        age: Number(newHorse.age),
+        color: newHorse.color,
+        gender: newHorse.gender,
+        status: newHorse.status,
+        weight: newHorse.weight ? Number(newHorse.weight) : null,
+        observations: newHorse.observations || null,
+        dateOfBirth: newHorse.dateOfBirth ? new Date(newHorse.dateOfBirth).toISOString().split('T')[0] : null,
+        entryDate: newHorse.entryDate ? new Date(newHorse.entryDate).toISOString().split('T')[0] : null,
+        animalPhotos: photoUrls.length > 0 ? photoUrls : null,
+        fatherPhoto: fatherPhotoUrl,
+        motherPhoto: motherPhotoUrl,
+        registrationCertificate: certificateUrl,
+      };
+      
+      console.log('Inserindo novo cavalo:', horseData);
+      
+      // Inserir no banco de dados
+      const { data, error } = await supabase
+        .from('horse')
+        .insert([horseData])
+        .select();
+        
+      if (error) {
+        console.error('Erro ao inserir no banco de dados:', error);
+        throw error;
+      }
+      
+      // Atualizar o estado local com o novo cavalo
+      if (data && data.length > 0) {
+        setHorses([...horses, data[0]]);
+      }
+      
+      setIsAddFormOpen(false);
+      
+      toast({
+        title: "Cavalo adicionado",
+        description: `${newHorse.name} foi adicionado com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar cavalo:', error);
+      toast({
+        title: "Erro ao adicionar",
+        description: "Não foi possível adicionar o cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Função para atualizar cavalos
+  const handleUpdateHorse = async (updatedHorse: HorseData) => {
+    try {
+      console.log('Recebendo dados para atualizar:', updatedHorse);
+      
+      // Array para armazenar URLs das fotos do animal
+      const photoUrls: string[] = [];
+      
+      // Processar fotos do animal uma a uma
+      if (updatedHorse.animalPhotos && Array.isArray(updatedHorse.animalPhotos)) {
+        for (const photo of updatedHorse.animalPhotos) {
+          if (!photo) continue;
+          try {
+            const url = await uploadFile(photo, 'animal');
+            if (url) photoUrls.push(url);
+          } catch (error) {
+            console.error('Erro no upload de foto de animal:', error);
+          }
+        }
+      }
+      
+      // Processar foto do pai
+      let fatherPhotoUrl = null;
+      if (updatedHorse.fatherPhoto) {
+        try {
+          fatherPhotoUrl = await uploadFile(updatedHorse.fatherPhoto, 'pai');
+        } catch (error) {
+          console.error('Erro no upload de foto do pai:', error);
+        }
+      }
+      
+      // Processar foto da mãe
+      let motherPhotoUrl = null;
+      if (updatedHorse.motherPhoto) {
+        try {
+          motherPhotoUrl = await uploadFile(updatedHorse.motherPhoto, 'mae');
+        } catch (error) {
+          console.error('Erro no upload de foto da mãe:', error);
+        }
+      }
+      
+      // Processar certificado
+      let certificateUrl = null;
+      if (updatedHorse.registrationCertificate) {
+        try {
+          certificateUrl = await uploadFile(updatedHorse.registrationCertificate, 'certificado');
+        } catch (error) {
+          console.error('Erro no upload de certificado:', error);
+        }
+      }
+      
+      // Preparar objeto com dados básicos para atualização
+      const horseData: any = {
+        name: updatedHorse.name,
+        breed: updatedHorse.breed,
+        age: Number(updatedHorse.age),
+        color: updatedHorse.color,
+        gender: updatedHorse.gender,
+        status: updatedHorse.status,
+        weight: updatedHorse.weight ? Number(updatedHorse.weight) : null,
+        observations: updatedHorse.observations || null,
+        dateOfBirth: updatedHorse.dateOfBirth ? new Date(updatedHorse.dateOfBirth).toISOString().split('T')[0] : null,
+        entryDate: updatedHorse.entryDate ? new Date(updatedHorse.entryDate).toISOString().split('T')[0] : null,
+      };
+
+      // Adicionar apenas os campos de arquivo que foram atualizados
+      if (photoUrls.length > 0) {
+        horseData.animalPhotos = photoUrls;
+      }
+      
+      if (fatherPhotoUrl) {
+        horseData.fatherPhoto = fatherPhotoUrl;
+      }
+      
+      if (motherPhotoUrl) {
+        horseData.motherPhoto = motherPhotoUrl;
+      }
+      
+      if (certificateUrl) {
+        horseData.registrationCertificate = certificateUrl;
+      }
+      
+      console.log('Atualizando dados do cavalo:', horseData);
+      
+      // Atualizar os dados no banco de dados
+      const { error } = await supabase
+        .from('horse')
+        .update(horseData)
+        .eq('id', updatedHorse.id);
+        
+      if (error) {
+        console.error('Erro ao atualizar no banco de dados:', error);
+        throw error;
+      }
+      
+      // Atualizar o estado local com os dados atualizados
+      const updatedHorses = horses.map(horse => 
+        horse.id === updatedHorse.id ? { ...horse, ...horseData } : horse
+      );
+      
+      setHorses(updatedHorses);
+      setIsEditFormOpen(false);
+      setSelectedHorse(null);
+      
+      toast({
+        title: "Cavalo atualizado",
+        description: `Os dados de ${updatedHorse.name} foram atualizados com sucesso.`,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar cavalo:', error);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar os dados do cavalo. Verifique o console para mais detalhes.",
+        variant: "destructive"
+      });
+    }
+  };
